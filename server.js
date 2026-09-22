@@ -56,6 +56,8 @@ io.on('connection', (socket) => {
       locationKey: data.locationKey,
       color: data.color,
       icon: data.icon,
+      callerName: data.callerName || 'Müdür',
+      callerIcon: data.callerIcon || '👤',
       timestamp: new Date().toISOString(),
       status: 'pending'
     };
@@ -67,7 +69,7 @@ io.on('connection', (socket) => {
     io.emit('incoming_call', callEntry);
     io.emit('call_history', callHistory);
 
-    console.log(`[${callEntry.location}] Çağrı oluşturuldu: ${callEntry.id}`);
+    console.log(`[${callEntry.location}] ${callEntry.callerName} çağrı oluşturdu: ${callEntry.id}`);
   });
 
   // Asistan görüldü dediğinde
