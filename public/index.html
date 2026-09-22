@@ -26,11 +26,11 @@
       <div class="logo-text">CallMee</div>
     </div>
     <div class="app-subtitle">Çağrı Sistemi</div>
-    <div class="screen-label">👔 Müdür Paneli</div>
+    <div class="screen-label" id="managerLabel">👔 Müdür Paneli</div>
   </div>
 
   <!-- MANAGER SELECTOR -->
-  <div class="profile-bar">
+  <div class="profile-bar" id="profileBar">
     <span class="profile-label">👤 Çağıran Yönetici</span>
     <div class="profile-options" id="profileOptions">
       <button class="profile-btn active" data-id="mehmet" data-name="Mehmet Bey" data-icon="👔" type="button">
@@ -156,10 +156,23 @@
       } catch(e) {}
     }
 
+    const profileBar   = document.getElementById('profileBar');
+    const managerLabel = document.getElementById('managerLabel');
+
     function updateProfileUI() {
-      document.querySelectorAll('.profile-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.id === activeCaller.id);
-      });
+      if (managerLabel) {
+        managerLabel.textContent = `${activeCaller.icon} ${activeCaller.name}`;
+      }
+
+      // Eğer kişiye özel link (?kisi=...) açılmışsa veya bir profil belirlenmişse:
+      // Diğer yöneticilerin isim ve butonlarını tamamen gizle!
+      if (paramUser || localStorage.getItem('callmee_active_caller')) {
+        if (profileBar) profileBar.style.display = 'none';
+      } else {
+        document.querySelectorAll('.profile-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.id === activeCaller.id);
+        });
+      }
     }
 
     document.querySelectorAll('.profile-btn').forEach(btn => {
