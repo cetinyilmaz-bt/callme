@@ -12,9 +12,16 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
+app.set('trust proxy', 1);
+
 // Statik dosyalar
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+
+// Sağlık kontrolü (Render / Cloud için)
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
 
 // Çağrı geçmişi (son 50)
 let callHistory = [];
@@ -37,7 +44,10 @@ app.get('/api/history', (req, res) => {
 // Çağrıyı sıfırla (asistan onayladığında)
 app.post('/api/acknowledge', (req, res) => {
   const { callId } = req.body;
+  const call = callHistory.find(c => c.id === callId);
+  if (call) call.status = 'acknowledged';
   io.emit('call_acknowledged', { callId });
+  io.emit('call_history', callHistory);
   res.json({ ok: true });
 });
 
