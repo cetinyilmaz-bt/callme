@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
@@ -88,11 +88,15 @@
 
   <div class="divider"></div>
 
-  <!-- SES SEÇICI -->
+  <!-- ODA BAZLI ZİL SESİ AYARLARI -->
   <div class="sound-section">
-    <div class="section-title">🎵 Zil Sesi Seç</div>
-    <div class="sound-options" id="soundOptions">
-      <!-- JS ile dolacak -->
+    <div class="section-header-row">
+      <div class="section-title">🔔 Oda Zil Sesi Ayarları</div>
+      <button class="reset-sounds-btn" id="resetSoundsBtn" title="Varsayılan Seslere Dön">↺ Sıfırla</button>
+    </div>
+    <div class="section-desc">Her odadan gelen çağrı için farklı bir ses tonu atayabilir ve test edebilirsiniz.</div>
+    <div class="room-sounds-list" id="roomSoundsList">
+      <!-- Odalar ve ses seçimleri dinamik doldurulur -->
     </div>
   </div>
 
@@ -123,32 +127,83 @@
     let currentCallId = null;
     let missedCount   = 0;
 
-    // ── Ses Seçici ──────────────────────────────────────
-    const savedSound = AudioManager.loadSavedSound();
-    const soundsContainer = document.getElementById('soundOptions');
+    // ── Oda Tanımları ──────────────────────────────────
+    const ROOMS = [
+      { key: 'vip', name: 'VIP', icon: '👑', color: '#f59e0b', tag: 'Özel Salon' },
+      { key: 'ana-oda', name: 'Ana Oda', icon: '🏛️', color: '#ef4444', tag: 'Yönetim' },
+      { key: 'akademi', name: 'Akademi', icon: '🎓', color: '#3b82f6', tag: 'Eğitim Odası' },
+      { key: 'kis-bahcesi', name: 'Kış Bahçesi', icon: '🌿', color: '#22c55e', tag: 'Bahçe Alanı' },
+      { key: 'max', name: 'Max', icon: '⚡', color: '#f97316', tag: 'Toplantı' },
+      { key: 'seecolor', name: 'SeeColor', icon: '🎨', color: '#a855f7', tag: 'Tasarım / Ar-Ge' }
+    ];
 
-    Object.entries(AudioManager.getSounds()).forEach(([id, sound]) => {
-      const btn = document.createElement('button');
-      btn.className = 'sound-opt' + (parseInt(id) === savedSound ? ' active' : '');
-      btn.dataset.id = id;
-      btn.innerHTML = `<span>${sound.icon}</span><span>${sound.name}</span><span class="preview-btn" title="Önizle">▶</span>`;
+    // ── Oda Sesleri UI Render ──────────────────────────
+    function renderRoomSoundSettings() {
+      const container = document.getElementById('roomSoundsList');
+      const sounds = AudioManager.getSounds();
+      const roomSounds = AudioManager.getRoomSounds();
 
-      // Ses seçme
-      btn.addEventListener('click', (e) => {
-        if (e.target.classList.contains('preview-btn')) return;
-        document.querySelectorAll('.sound-opt').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        AudioManager.setSound(id);
+      container.innerHTML = ROOMS.map(room => {
+        const selectedSoundId = roomSounds[room.key] || 1;
+        const optionsHtml = Object.values(sounds).map(s =>
+          `<option value="${s.id}" ${s.id === selectedSoundId ? 'selected' : ''}>${s.icon} ${s.name}</option>`
+        ).join('');
+
+        return `
+          <div class="room-sound-card" style="--room-color: ${room.color}">
+            <div class="room-info">
+              <span class="room-icon">${room.icon}</span>
+              <div class="room-names">
+                <span class="room-title">${room.name}</span>
+                <span class="room-sub">${room.tag}</span>
+              </div>
+            </div>
+            <div class="room-controls">
+              <select class="room-sound-select" data-room="${room.key}" aria-label="${room.name} zil sesi">
+                ${optionsHtml}
+              </select>
+              <button class="preview-btn-room" data-room="${room.key}" type="button">
+                <span>▶</span> Dinle
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Seçim değiştiğinde kaydet ve kısa önizle
+      container.querySelectorAll('.room-sound-select').forEach(sel => {
+        sel.addEventListener('change', (e) => {
+          const roomKey = e.target.dataset.room;
+          const soundId = e.target.value;
+          AudioManager.setRoomSound(roomKey, soundId);
+          AudioManager.previewSound(soundId);
+        });
       });
 
-      // Önizle
-      btn.querySelector('.preview-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        AudioManager.previewSound(id);
-      });
+      // Dinle butonları
+      container.querySelectorAll('.preview-btn-room').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const roomKey = btn.dataset.room;
+          const select = container.querySelector(`.room-sound-select[data-room="${roomKey}"]`);
+          const soundId = select.value;
 
-      soundsContainer.appendChild(btn);
+          btn.classList.add('playing');
+          btn.innerHTML = '<span>🔊</span> Çalıyor';
+          AudioManager.previewSound(soundId);
+          setTimeout(() => {
+            btn.classList.remove('playing');
+            btn.innerHTML = '<span>▶</span> Dinle';
+          }, 2400);
+        });
+      });
+    }
+
+    document.getElementById('resetSoundsBtn').addEventListener('click', () => {
+      AudioManager.resetToDefaults();
+      renderRoomSoundSettings();
     });
+
+    renderRoomSoundSettings();
 
     // ── Socket Bağlantısı ──────────────────────────────
     const io_socket = io();
@@ -183,7 +238,7 @@
     function showCall(call) {
       currentCallId = call.id;
 
-      // Renk
+      // Renk ve ikon
       callRing.style.setProperty('--call-color', call.color || '#6c63ff');
       callIcon.textContent = call.icon || '📞';
       callLoc.textContent  = call.location;
@@ -194,8 +249,8 @@
       void document.body.offsetWidth;
       document.body.classList.add('flash');
 
-      // Ses çal
-      AudioManager.play();
+      // Odaya özel sesi çal
+      AudioManager.play(call.locationKey);
 
       // Tarayıcı bildirimi
       sendBrowserNotif(call);
