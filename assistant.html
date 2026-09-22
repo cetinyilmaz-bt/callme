@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>CallMee – Asistan</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .screen-label-asst {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 20px; padding: 4px 14px;
+      font-size: 11px; font-weight: 600; color: #86efac;
+      letter-spacing: 1.5px; text-transform: uppercase;
+    }
+    .conn-badge {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 12px; font-weight: 500; color: var(--text-dim);
+      background: var(--glass); border: 1px solid var(--border);
+    }
+    .conn-badge .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #22c55e; box-shadow: 0 0 6px #22c55e;
+      animation: blink 2s infinite;
+    }
+    .missed-badge {
+      position: fixed; top: 16px; right: 16px;
+      background: #ef4444; color: #fff;
+      border-radius: 50%; width: 24px; height: 24px;
+      display: none; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700;
+      box-shadow: 0 0 12px rgba(239,68,68,0.6);
+      z-index: 400;
+    }
+    .missed-badge.show { display: flex; }
+    body.flash { animation: screen-flash 0.6s ease 3; }
+    .divider {
+      height: 1px; background: var(--border);
+      margin: 0 20px;
+    }
+    .no-history {
+      text-align: center; color: var(--text-dim);
+      font-size: 13px; padding: 20px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- INCOMING CALL OVERLAY -->
+  <div class="call-overlay" id="callOverlay">
+    <div class="call-card">
+      <div class="call-pulse-ring" id="callRing" style="--call-color: #6c63ff">
+        <span id="callIcon">📞</span>
+      </div>
+      <div class="call-label">Çağrı Geliyor</div>
+      <div class="call-location" id="callLocation">—</div>
+      <div class="call-time" id="callTime"></div>
+      <button class="ack-btn" onclick="acknowledgeCall()">✅ Görüldü</button>
+    </div>
+  </div>
+
+  <!-- MISSED BADGE -->
+  <div class="missed-badge" id="missedBadge">0</div>
+
+  <!-- HEADER -->
+  <div class="app-header">
+    <div class="app-logo">
+      <div class="logo-icon">🔔</div>
+      <div class="logo-text">CallMee</div>
+    </div>
+    <div class="app-subtitle">Çağrı Sistemi</div>
+    <div class="screen-label-asst">🎧 Asistan Paneli</div>
+  </div>
+
+  <!-- STANDBY -->
+  <div class="standby-screen" id="standbyScreen">
+    <div class="standby-icon">🔕</div>
+    <div class="standby-text">Çağrı bekleniyor…</div>
+    <div class="conn-badge">
+      <div class="dot" id="connDot"></div>
+      <span id="connText">Bağlanıyor</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ODA BAZLI ZİL SESİ AYARLARI -->
+  <div class="sound-section">
+    <div class="section-header-row">
+      <div class="section-title">🔔 Oda Zil Sesi Ayarları</div>
+      <button class="reset-sounds-btn" id="resetSoundsBtn" title="Varsayılan Seslere Dön">↺ Sıfırla</button>
+    </div>
+    <div class="section-desc">Her odadan gelen çağrı için farklı bir ses tonu atayabilir ve test edebilirsiniz.</div>
+    <div class="room-sounds-list" id="roomSoundsList">
+      <!-- Odalar ve ses seçimleri dinamik doldurulur -->
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ÇAĞRI GEÇMİŞİ -->
+  <div class="history-section">
+    <div class="section-title">📋 Son Çağrılar</div>
+    <div class="history-list" id="historyList">
+      <div class="no-history">Henüz çağrı yok</div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="sounds.js"></script>
+  <script>
+    const socket      = document.getElementById ? io() : null;
+    const overlay     = document.getElementById('callOverlay');
+    const callRing    = document.getElementById('callRing');
+    const callIcon    = document.getElementById('callIcon');
+    const callLoc     = document.getElementById('callLocation');
+    const callTime    = document.getElementById('callTime');
+    const historyList = document.getElementById('historyList');
+    const connDot     = document.getElementById('connDot');
+    const connText    = document.getElementById('connText');
+    const missedBadge = document.getElementById('missedBadge');
+
+    let currentCallId = null;
+    let missedCount   = 0;
+
+    // ── Oda Tanımları ──────────────────────────────────
+    const ROOMS = [
+      { key: 'vip', name: 'VIP', icon: '👑', color: '#f59e0b', tag: 'Özel Salon' },
+      { key: 'ana-oda', name: 'Ana Oda', icon: '🏛️', color: '#ef4444', tag: 'Yönetim' },
+      { key: 'akademi', name: 'Akademi', icon: '🎓', color: '#3b82f6', tag: 'Eğitim Odası' },
+      { key: 'kis-bahcesi', name: 'Kış Bahçesi', icon: '🌿', color: '#22c55e', tag: 'Bahçe Alanı' },
+      { key: 'max', name: 'Max', icon: '⚡', color: '#f97316', tag: 'Toplantı' },
+      { key: 'seecolor', name: 'SeeColor', icon: '🎨', color: '#a855f7', tag: 'Tasarım / Ar-Ge' }
+    ];
+
+    // ── Oda Sesleri UI Render ──────────────────────────
+    function renderRoomSoundSettings() {
+      const container = document.getElementById('roomSoundsList');
+      const sounds = AudioManager.getSounds();
+      const roomSounds = AudioManager.getRoomSounds();
+
+      container.innerHTML = ROOMS.map(room => {
+        const selectedSoundId = roomSounds[room.key] || 1;
+        const optionsHtml = Object.values(sounds).map(s =>
+          `<option value="${s.id}" ${s.id === selectedSoundId ? 'selected' : ''}>${s.icon} ${s.name}</option>`
+        ).join('');
+
+        return `
+          <div class="room-sound-card" style="--room-color: ${room.color}">
+            <div class="room-info">
+              <span class="room-icon">${room.icon}</span>
+              <div class="room-names">
+                <span class="room-title">${room.name}</span>
+                <span class="room-sub">${room.tag}</span>
+              </div>
+            </div>
+            <div class="room-controls">
+              <select class="room-sound-select" data-room="${room.key}" aria-label="${room.name} zil sesi">
+                ${optionsHtml}
+              </select>
+              <button class="preview-btn-room" data-room="${room.key}" type="button">
+                <span>▶</span> Dinle
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Seçim değiştiğinde kaydet ve kısa önizle
+      container.querySelectorAll('.room-sound-select').forEach(sel => {
+        sel.addEventListener('change', (e) => {
+          const roomKey = e.target.dataset.room;
+          const soundId = e.target.value;
+          AudioManager.setRoomSound(roomKey, soundId);
+          AudioManager.previewSound(soundId);
+        });
+      });
+
+      // Dinle butonları
+      container.querySelectorAll('.preview-btn-room').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const roomKey = btn.dataset.room;
+          const select = container.querySelector(`.room-sound-select[data-room="${roomKey}"]`);
+          const soundId = select.value;
+
+          btn.classList.add('playing');
+          btn.innerHTML = '<span>🔊</span> Çalıyor';
+          AudioManager.previewSound(soundId);
+          setTimeout(() => {
+            btn.classList.remove('playing');
+            btn.innerHTML = '<span>▶</span> Dinle';
+          }, 2400);
+        });
+      });
+    }
+
+    document.getElementById('resetSoundsBtn').addEventListener('click', () => {
+      AudioManager.resetToDefaults();
+      renderRoomSoundSettings();
+    });
+
+    renderRoomSoundSettings();
+
+    // ── Socket Bağlantısı ──────────────────────────────
+    const io_socket = io();
+
+    io_socket.on('connect', () => {
+      connDot.style.background = '#22c55e';
+      connDot.style.boxShadow  = '0 0 6px #22c55e';
+      connText.textContent = 'Bağlantı aktif';
+    });
+
+    io_socket.on('disconnect', () => {
+      connDot.style.background = '#ef4444';
+      connDot.style.boxShadow  = '0 0 6px #ef4444';
+      connText.textContent = 'Bağlantı kesildi';
+    });
+
+    io_socket.on('incoming_call', (call) => {
+      showCall(call);
+    });
+
+    io_socket.on('call_history', (history) => {
+      renderHistory(history);
+    });
+
+    io_socket.on('call_acknowledged', (data) => {
+      if (data.callId === currentCallId) {
+        // başkası görüldü dedi, overlay kapatılabilir
+      }
+    });
+
+    // ── Çağrı Göster ──────────────────────────────────
+    function showCall(call) {
+      currentCallId = call.id;
+
+      // Renk ve ikon
+      callRing.style.setProperty('--call-color', call.color || '#6c63ff');
+      callIcon.textContent = call.icon || '📞';
+      callLoc.textContent  = call.location;
+      callTime.textContent = formatTime(call.timestamp);
+
+      overlay.classList.add('active');
+      document.body.classList.remove('flash');
+      void document.body.offsetWidth;
+      document.body.classList.add('flash');
+
+      // Odaya özel sesi çal
+      AudioManager.play(call.locationKey);
+
+      // Tarayıcı bildirimi
+      sendBrowserNotif(call);
+
+      // Missed sayacı güncelle
+      if (document.hidden) {
+        missedCount++;
+        missedBadge.textContent = missedCount;
+        missedBadge.classList.add('show');
+      }
+    }
+
+    // ── Görüldü ───────────────────────────────────────
+    function acknowledgeCall() {
+      AudioManager.stop();
+      overlay.classList.remove('active');
+      if (currentCallId) {
+        io_socket.emit('acknowledge_call', { callId: currentCallId });
+      }
+      missedCount = 0;
+      missedBadge.classList.remove('show');
+      currentCallId = null;
+    }
+
+    // ── Geçmişi Render Et ─────────────────────────────
+    function renderHistory(history) {
+      if (!history || history.length === 0) {
+        historyList.innerHTML = '<div class="no-history">Henüz çağrı yok</div>';
+        return;
+      }
+      historyList.innerHTML = history.slice(0, 10).map(c => `
+        <div class="history-item">
+          <span class="h-icon">${c.icon || '📞'}</span>
+          <div class="h-info">
+            <div class="h-loc">${c.location}</div>
+            <div class="h-time">${formatTime(c.timestamp)}</div>
+          </div>
+          <span class="h-status ${c.status}">${c.status === 'acknowledged' ? 'Görüldü' : 'Bekliyor'}</span>
+        </div>
+      `).join('');
+    }
+
+    // ── Tarayıcı Bildirimi ────────────────────────────
+    function sendBrowserNotif(call) {
+      if (!('Notification' in window)) return;
+      if (Notification.permission === 'granted') {
+        new Notification('📞 Çağrı – ' + call.location, {
+          body: call.icon + ' ' + call.location + ' odasından çağrı geliyor',
+          icon: '/favicon.ico',
+          tag: 'callmee',
+          renotify: true
+        });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    }
+
+    // ── Yardımcı ──────────────────────────────────────
+    function formatTime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    // Sayfa görünür olduğunda missed sıfırla
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !overlay.classList.contains('active')) {
+        missedCount = 0;
+        missedBadge.classList.remove('show');
+      }
+    });
+
+    // Bildirim izni iste
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  </script>
+</body>
+</html>
