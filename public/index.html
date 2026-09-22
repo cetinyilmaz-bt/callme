@@ -1,0 +1,165 @@
+﻿<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>CallMee – Müdür</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .screen-label {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(108,99,255,0.15); border: 1px solid rgba(108,99,255,0.3);
+      border-radius: 20px; padding: 4px 14px;
+      font-size: 11px; font-weight: 600; color: #a8a4ff;
+      letter-spacing: 1.5px; text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <!-- HEADER -->
+  <div class="app-header">
+    <div class="app-logo">
+      <div class="logo-icon">📞</div>
+      <div class="logo-text">CallMee</div>
+    </div>
+    <div class="app-subtitle">Çağrı Sistemi</div>
+    <div class="screen-label">👔 Müdür Paneli</div>
+  </div>
+
+  <!-- CONNECTION STATUS -->
+  <div class="caller-status">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Bağlanıyor…</span>
+  </div>
+
+  <!-- LOCATION GRID -->
+  <div class="locations-grid" id="locationsGrid">
+
+    <button class="location-btn" data-key="vip" data-name="VIP"
+      data-icon="👑" data-color="#f59e0b"
+      style="--loc-color: #f59e0b"
+      onclick="sendCall(this)">
+      <div class="loc-glow"></div>
+      <span class="loc-icon">👑</span>
+      <span class="loc-name">VIP</span>
+      <span class="loc-tag">Oda</span>
+    </button>
+
+    <button class="location-btn" data-key="seecolor" data-name="SeeColor"
+      data-icon="🎨" data-color="#a855f7"
+      style="--loc-color: #a855f7"
+      onclick="sendCall(this)">
+      <div class="loc-glow"></div>
+      <span class="loc-icon">🎨</span>
+      <span class="loc-name">SeeColor</span>
+      <span class="loc-tag">Oda</span>
+    </button>
+
+    <button class="location-btn" data-key="akademi" data-name="Akademi"
+      data-icon="🎓" data-color="#3b82f6"
+      style="--loc-color: #3b82f6"
+      onclick="sendCall(this)">
+      <div class="loc-glow"></div>
+      <span class="loc-icon">🎓</span>
+      <span class="loc-name">Akademi</span>
+      <span class="loc-tag">Oda</span>
+    </button>
+
+    <button class="location-btn" data-key="max" data-name="Max"
+      data-icon="⚡" data-color="#f97316"
+      style="--loc-color: #f97316"
+      onclick="sendCall(this)">
+      <div class="loc-glow"></div>
+      <span class="loc-icon">⚡</span>
+      <span class="loc-name">Max</span>
+      <span class="loc-tag">Oda</span>
+    </button>
+
+    <button class="location-btn" data-key="kis-bahcesi" data-name="Kış Bahçesi"
+      data-icon="🌿" data-color="#22c55e"
+      style="--loc-color: #22c55e"
+      onclick="sendCall(this)">
+      <div class="loc-glow"></div>
+      <span class="loc-icon">🌿</span>
+      <span class="loc-name">Kış Bahçesi</span>
+      <span class="loc-tag">Oda</span>
+    </button>
+
+    <button class="location-btn" data-key="ana-oda" data-name="Ana Oda"
+      data-icon="🏛️" data-color="#ef4444"
+      style="--loc-color: #ef4444"
+      onclick="sendCall(this)">
+      <div class="loc-glow"></div>
+      <span class="loc-icon">🏛️</span>
+      <span class="loc-name">Ana Oda</span>
+      <span class="loc-tag">Oda</span>
+    </button>
+
+  </div>
+
+  <!-- SENT TOAST -->
+  <div class="sent-toast" id="sentToast">
+    <span class="toast-icon" id="toastIcon">✅</span>
+    <span id="toastText">Çağrı gönderildi</span>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const statusDot  = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const toast      = document.getElementById('sentToast');
+    let toastTimer   = null;
+
+    socket.on('connect', () => {
+      statusDot.style.background = '#22c55e';
+      statusDot.style.boxShadow  = '0 0 8px #22c55e';
+      statusText.textContent = 'Bağlantı aktif';
+    });
+
+    socket.on('disconnect', () => {
+      statusDot.style.background = '#ef4444';
+      statusDot.style.boxShadow  = '0 0 8px #ef4444';
+      statusText.textContent = 'Bağlantı kesildi – yeniden bağlanıyor…';
+    });
+
+    socket.on('call_acknowledged', (data) => {
+      // Görüldü bildirimi gelirse (isteğe bağlı UI güncellemesi)
+    });
+
+    function sendCall(btn) {
+      const key   = btn.dataset.key;
+      const name  = btn.dataset.name;
+      const icon  = btn.dataset.icon;
+      const color = btn.dataset.color;
+
+      // Buton animasyonu
+      btn.classList.remove('sending');
+      void btn.offsetWidth;
+      btn.classList.add('sending');
+      setTimeout(() => btn.classList.remove('sending'), 600);
+
+      // Socket ile gönder
+      socket.emit('send_call', {
+        locationKey: key,
+        location: name,
+        icon: icon,
+        color: color
+      });
+
+      // Toast göster
+      document.getElementById('toastIcon').textContent = icon;
+      document.getElementById('toastText').textContent = name + ' — çağrı gönderildi';
+      clearTimeout(toastTimer);
+      toast.classList.add('show');
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+
+      // Haptic feedback (mobil)
+      if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+    }
+  </script>
+</body>
+</html>
