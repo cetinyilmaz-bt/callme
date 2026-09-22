@@ -366,6 +366,28 @@ const AudioManager = (() => {
     return audioCtx !== null && audioCtx.state === 'running';
   }
 
+  // Ses motorunu arka planda hemen ve kesintisiz aktif tut
+  function keepAudioAlive() {
+    try {
+      const ctx = getCtx();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    } catch (e) {}
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('load', keepAudioAlive, { passive: true });
+    window.addEventListener('focus', keepAudioAlive, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) keepAudioAlive();
+    }, { passive: true });
+    ['click', 'touchstart', 'touchend', 'keydown', 'mousedown'].forEach(evt => {
+      window.addEventListener(evt, keepAudioAlive, { passive: true });
+    });
+    keepAudioAlive();
+  }
+
   return {
     getSounds: () => SOUNDS,
     getRoomSounds: () => roomSounds,

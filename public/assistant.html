@@ -87,10 +87,6 @@
       <div class="dot" id="connDot"></div>
       <span id="connText">Bağlanıyor</span>
     </div>
-    <button class="audio-toggle-btn" id="audioToggleBtn" type="button" title="Ses uyarısını etkinleştir veya test et">
-      <span id="audioToggleIcon">🔔</span>
-      <span id="audioToggleText">Sesi Etkinleştir / Test Et</span>
-    </button>
   </div>
 
   <div class="divider"></div>
@@ -136,9 +132,6 @@
     const connDot         = document.getElementById('connDot');
     const connText        = document.getElementById('connText');
     const missedBadge     = document.getElementById('missedBadge');
-    const audioToggleBtn  = document.getElementById('audioToggleBtn');
-    const audioToggleIcon = document.getElementById('audioToggleIcon');
-    const audioToggleText = document.getElementById('audioToggleText');
 
     const historyCount    = document.getElementById('historyCount');
     const clearHistoryBtn = document.getElementById('clearHistoryBtn');
@@ -453,39 +446,10 @@
     }
 
     // ── Ses İzni & Web Audio Kilidi Açma ──────────────
-    function updateAudioUI(unlocked) {
-      if (!audioToggleBtn) return;
-      if (unlocked) {
-        audioToggleBtn.classList.add('active');
-        if (audioToggleIcon) audioToggleIcon.textContent = '🔊';
-        if (audioToggleText) audioToggleText.textContent = 'Ses Aktif (Test Et)';
-      } else {
-        audioToggleBtn.classList.remove('active');
-        if (audioToggleIcon) audioToggleIcon.textContent = '🔔';
-        if (audioToggleText) audioToggleText.textContent = 'Sesi Etkinleştir / Test Et';
-      }
-    }
-
-    function unlockAudioHandler() {
-      AudioManager.unlock().then(() => {
-        updateAudioUI(true);
-      });
-    }
-
-    // Sayfada herhangi bir tıklama veya dokunmada ses kilidini aç
+    // ── Ses Motorunu Arka Planda Daima Aktif Tut ─────────
     ['click', 'touchstart', 'keydown'].forEach(evt => {
-      document.addEventListener(evt, unlockAudioHandler, { once: true, passive: true });
+      document.addEventListener(evt, () => AudioManager.unlock(), { once: true, passive: true });
     });
-
-    if (audioToggleBtn) {
-      audioToggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        AudioManager.unlock().then(() => {
-          updateAudioUI(true);
-          AudioManager.previewSound(1);
-        });
-      });
-    }
 
     // ── Yardımcı ──────────────────────────────────────
     function formatTime(iso) {

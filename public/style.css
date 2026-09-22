@@ -230,34 +230,6 @@ html, body {
   letter-spacing: 1px;
 }
 
-.audio-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(108, 99, 255, 0.15);
-  border: 1px solid rgba(108, 99, 255, 0.4);
-  color: #c7d2fe;
-  padding: 8px 18px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(10px);
-  user-select: none;
-}
-.audio-toggle-btn:hover {
-  background: rgba(108, 99, 255, 0.25);
-  border-color: #6c63ff;
-  color: #fff;
-  transform: translateY(-1px);
-}
-.audio-toggle-btn.active {
-  background: rgba(34, 197, 94, 0.15);
-  border-color: rgba(34, 197, 94, 0.4);
-  color: #86efac;
-}
-
 /* ── INCOMING CALL OVERLAY & MULTI-CARD SUPPORT ── */
 .call-overlay {
   position: fixed;
