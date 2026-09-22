@@ -50,17 +50,19 @@
 </head>
 <body>
 
-  <!-- INCOMING CALL OVERLAY -->
+  <!-- INCOMING CALL OVERLAY (ÇOKLU ÇAĞRI DESTEĞİ) -->
   <div class="call-overlay" id="callOverlay">
-    <div class="call-card">
-      <div class="call-pulse-ring" id="callRing" style="--call-color: #6c63ff">
-        <span id="callIcon">📞</span>
+    <div class="call-overlay-header" id="overlayHeader">
+      <div class="active-calls-title">
+        <span class="active-calls-pulse"></span>
+        <span id="activeCallsText">🚨 Aktif Çağrılar</span>
       </div>
-      <div class="call-caller" id="callCaller">👤 Müdür</div>
-      <div class="call-label">Çağrı Geliyor</div>
-      <div class="call-location" id="callLocation">—</div>
-      <div class="call-time" id="callTime"></div>
-      <button class="ack-btn" onclick="acknowledgeCall()">✅ Görüldü</button>
+      <button class="ack-all-btn" id="ackAllBtn" onclick="acknowledgeAllCalls()" type="button">
+        ✓ Tümünü Görüldü Yap
+      </button>
+    </div>
+    <div class="call-cards-container" id="callCardsContainer">
+      <!-- Aktif çağrı kartları yan yana buraya basılır -->
     </div>
   </div>
 
@@ -114,19 +116,18 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="sounds.js"></script>
   <script>
-    const socket      = document.getElementById ? io() : null;
-    const overlay     = document.getElementById('callOverlay');
-    const callRing    = document.getElementById('callRing');
-    const callIcon    = document.getElementById('callIcon');
-    const callLoc     = document.getElementById('callLocation');
-    const callTime    = document.getElementById('callTime');
-    const historyList = document.getElementById('historyList');
-    const connDot     = document.getElementById('connDot');
-    const connText    = document.getElementById('connText');
-    const missedBadge = document.getElementById('missedBadge');
+    const socket          = document.getElementById ? io() : null;
+    const overlay         = document.getElementById('callOverlay');
+    const overlayHeader   = document.getElementById('overlayHeader');
+    const activeCallsText = document.getElementById('activeCallsText');
+    const cardsContainer  = document.getElementById('callCardsContainer');
+    const historyList     = document.getElementById('historyList');
+    const connDot         = document.getElementById('connDot');
+    const connText        = document.getElementById('connText');
+    const missedBadge     = document.getElementById('missedBadge');
 
-    let currentCallId = null;
-    let missedCount   = 0;
+    let activeCalls = [];
+    let missedCount = 0;
 
     // ── Oda Tanımları ──────────────────────────────────
     const ROOMS = [
@@ -222,36 +223,82 @@
     });
 
     io_socket.on('incoming_call', (call) => {
-      showCall(call);
+      addIncomingCall(call);
     });
 
     io_socket.on('call_history', (history) => {
       renderHistory(history);
-    });
-
-    io_socket.on('call_acknowledged', (data) => {
-      if (data.callId === currentCallId) {
-        // başkası görüldü dedi, overlay kapatılabilir
+      // Henüz görülmemiş çağrılar varsa aktif listeye al
+      const unacknowledged = (history || []).filter(c => c.status === 'pending');
+      if (unacknowledged.length > 0 && activeCalls.length === 0) {
+        activeCalls = [...unacknowledged];
+        renderActiveCalls();
+        AudioManager.play(activeCalls[activeCalls.length - 1].locationKey);
       }
     });
 
-    // ── Çağrı Göster ──────────────────────────────────
-    function showCall(call) {
-      currentCallId = call.id;
+    io_socket.on('call_acknowledged', (data) => {
+      if (activeCalls.some(c => c.id === data.callId)) {
+        activeCalls = activeCalls.filter(c => c.id !== data.callId);
+        if (activeCalls.length > 0) {
+          AudioManager.play(activeCalls[activeCalls.length - 1].locationKey);
+        } else {
+          AudioManager.stop();
+        }
+        renderActiveCalls();
+      }
+    });
 
-      // Renk, ikon ve çağıran kişi
-      callRing.style.setProperty('--call-color', call.color || '#6c63ff');
-      callIcon.textContent   = call.icon || '📞';
-      callLoc.textContent    = call.location;
-      callTime.textContent   = formatTime(call.timestamp);
-      document.getElementById('callCaller').textContent = `${call.callerIcon || '👤'} ${call.callerName || 'Müdür'}`;
+    // ── Aktif Çağrıları Yan Yana Render Et ────────────
+    function renderActiveCalls() {
+      if (activeCalls.length === 0) {
+        overlay.classList.remove('active');
+        overlayHeader.classList.remove('show');
+        AudioManager.stop();
+        cardsContainer.innerHTML = '';
+        return;
+      }
 
       overlay.classList.add('active');
+      if (activeCalls.length > 1) {
+        overlayHeader.classList.add('show');
+        activeCallsText.textContent = `🚨 Aktif Çağrılar (${activeCalls.length})`;
+      } else {
+        overlayHeader.classList.remove('show');
+      }
+
+      cardsContainer.innerHTML = activeCalls.map(call => `
+        <div class="call-card" id="card-${call.id}">
+          <div class="call-pulse-ring" style="--call-color: ${call.color || '#6c63ff'}">
+            <span>${call.icon || '📞'}</span>
+          </div>
+          <div class="call-caller">${call.callerIcon || '👤'} ${call.callerName || 'Müdür'}</div>
+          <div class="call-label">Çağrı Geliyor</div>
+          <div class="call-location">${call.location}</div>
+          <div class="call-time">${formatTime(call.timestamp)}</div>
+          <button class="ack-btn" onclick="acknowledgeSingleCall('${call.id}')" type="button">
+            ✅ Görüldü
+          </button>
+        </div>
+      `).join('');
+    }
+
+    // ── Gelen Çağrıyı Ekle ────────────────────────────
+    function addIncomingCall(call) {
+      const idx = activeCalls.findIndex(c => c.id === call.id);
+      if (idx === -1) {
+        activeCalls.push(call);
+      } else {
+        activeCalls[idx] = call;
+      }
+
+      renderActiveCalls();
+
       document.body.classList.remove('flash');
       void document.body.offsetWidth;
       document.body.classList.add('flash');
 
-      // Odaya özel sesi çal
+      // En son gelen odanın sesini çal
       AudioManager.play(call.locationKey);
 
       // Tarayıcı bildirimi
@@ -265,16 +312,33 @@
       }
     }
 
-    // ── Görüldü ───────────────────────────────────────
-    function acknowledgeCall() {
-      AudioManager.stop();
-      overlay.classList.remove('active');
-      if (currentCallId) {
-        io_socket.emit('acknowledge_call', { callId: currentCallId });
+    // ── Tek Bir Çağrıyı Görüldü Yap ───────────────────
+    function acknowledgeSingleCall(callId) {
+      io_socket.emit('acknowledge_call', { callId: callId });
+      activeCalls = activeCalls.filter(c => c.id !== callId);
+
+      if (activeCalls.length > 0) {
+        const nextCall = activeCalls[activeCalls.length - 1];
+        AudioManager.play(nextCall.locationKey);
+      } else {
+        AudioManager.stop();
+        missedCount = 0;
+        missedBadge.classList.remove('show');
       }
+
+      renderActiveCalls();
+    }
+
+    // ── Tümünü Görüldü Yap ────────────────────────────
+    function acknowledgeAllCalls() {
+      activeCalls.forEach(c => {
+        io_socket.emit('acknowledge_call', { callId: c.id });
+      });
+      activeCalls = [];
+      AudioManager.stop();
       missedCount = 0;
       missedBadge.classList.remove('show');
-      currentCallId = null;
+      renderActiveCalls();
     }
 
     // ── Geçmişi Render Et ─────────────────────────────
