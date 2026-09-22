@@ -87,6 +87,10 @@
       <div class="dot" id="connDot"></div>
       <span id="connText">Bağlanıyor</span>
     </div>
+    <button class="audio-toggle-btn" id="audioToggleBtn" type="button" title="Ses uyarısını etkinleştir veya test et">
+      <span id="audioToggleIcon">🔔</span>
+      <span id="audioToggleText">Sesi Etkinleştir / Test Et</span>
+    </button>
   </div>
 
   <div class="divider"></div>
@@ -107,16 +111,23 @@
 
   <!-- ÇAĞRI GEÇMİŞİ -->
   <div class="history-section">
-    <div class="section-title">📋 Son Çağrılar</div>
+    <div class="history-header-row">
+      <div class="section-title">
+        <span>📋 Son Çağrılar</span>
+        <span class="badge-count" id="historyCount">0</span>
+      </div>
+      <button class="clear-history-btn" id="clearHistoryBtn" title="Listeyi Temizle" type="button">
+        🗑️ Temizle
+      </button>
+    </div>
     <div class="history-list" id="historyList">
-      <div class="no-history">Henüz çağrı yok</div>
+      <div class="no-history">Henüz çağrı kaydı yok</div>
     </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="sounds.js"></script>
   <script>
-    const socket          = document.getElementById ? io() : null;
     const overlay         = document.getElementById('callOverlay');
     const overlayHeader   = document.getElementById('overlayHeader');
     const activeCallsText = document.getElementById('activeCallsText');
@@ -125,18 +136,24 @@
     const connDot         = document.getElementById('connDot');
     const connText        = document.getElementById('connText');
     const missedBadge     = document.getElementById('missedBadge');
+    const audioToggleBtn  = document.getElementById('audioToggleBtn');
+    const audioToggleIcon = document.getElementById('audioToggleIcon');
+    const audioToggleText = document.getElementById('audioToggleText');
+
+    const historyCount    = document.getElementById('historyCount');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 
     let activeCalls = [];
     let missedCount = 0;
 
-    // ── Oda Tanımları ──────────────────────────────────
+    // ── Oda Tanımları (Müdür Ekranı Sırasıyla Uyumlu) ────
     const ROOMS = [
       { key: 'vip', name: 'VIP', icon: '👑', color: '#f59e0b', tag: 'Özel Salon' },
-      { key: 'ana-oda', name: 'Ana Oda', icon: '🏛️', color: '#ef4444', tag: 'Yönetim' },
+      { key: 'seecolor', name: 'SeeColor', icon: '🎨', color: '#a855f7', tag: 'Tasarım / Ar-Ge' },
       { key: 'akademi', name: 'Akademi', icon: '🎓', color: '#3b82f6', tag: 'Eğitim Odası' },
-      { key: 'kis-bahcesi', name: 'Kış Bahçesi', icon: '🌿', color: '#22c55e', tag: 'Bahçe Alanı' },
       { key: 'max', name: 'Max', icon: '⚡', color: '#f97316', tag: 'Toplantı' },
-      { key: 'seecolor', name: 'SeeColor', icon: '🎨', color: '#a855f7', tag: 'Tasarım / Ar-Ge' }
+      { key: 'kis-bahcesi', name: 'Kış Bahçesi', icon: '🌿', color: '#22c55e', tag: 'Bahçe Alanı' },
+      { key: 'ana-oda', name: 'Ana Oda', icon: '🏛️', color: '#ef4444', tag: 'Yönetim' }
     ];
 
     // ── Oda Sesleri UI Render ──────────────────────────
@@ -151,6 +168,8 @@
           `<option value="${s.id}" ${s.id === selectedSoundId ? 'selected' : ''}>${s.icon} ${s.name}</option>`
         ).join('');
 
+        const currSound = sounds[selectedSoundId] || { name: 'Zil', icon: '🔔' };
+
         return `
           <div class="room-sound-card" style="--room-color: ${room.color}">
             <div class="room-info">
@@ -164,7 +183,7 @@
               <select class="room-sound-select" data-room="${room.key}" aria-label="${room.name} zil sesi">
                 ${optionsHtml}
               </select>
-              <button class="preview-btn-room" data-room="${room.key}" type="button">
+              <button class="preview-btn-room" data-room="${room.key}" type="button" title="${room.name} için sesi dinle">
                 <span>▶</span> Dinle
               </button>
             </div>
@@ -176,7 +195,7 @@
       container.querySelectorAll('.room-sound-select').forEach(sel => {
         sel.addEventListener('change', (e) => {
           const roomKey = e.target.dataset.room;
-          const soundId = e.target.value;
+          const soundId = parseInt(e.target.value);
           AudioManager.setRoomSound(roomKey, soundId);
           AudioManager.previewSound(soundId);
         });
@@ -207,46 +226,61 @@
 
     renderRoomSoundSettings();
 
-    // ── Socket Bağlantısı ──────────────────────────────
-    const io_socket = io();
+    // ── Tekil Socket Bağlantısı ──────────────────────────────
+    const socket = io({
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000
+    });
 
-    io_socket.on('connect', () => {
+    socket.on('connect', () => {
       connDot.style.background = '#22c55e';
       connDot.style.boxShadow  = '0 0 6px #22c55e';
       connText.textContent = 'Bağlantı aktif';
     });
 
-    io_socket.on('disconnect', () => {
+    socket.on('disconnect', () => {
       connDot.style.background = '#ef4444';
       connDot.style.boxShadow  = '0 0 6px #ef4444';
       connText.textContent = 'Bağlantı kesildi';
     });
 
-    io_socket.on('incoming_call', (call) => {
+    socket.on('connect_error', () => {
+      connDot.style.background = '#f59e0b';
+      connDot.style.boxShadow  = '0 0 6px #f59e0b';
+      connText.textContent = 'Bağlanıyor…';
+    });
+
+    socket.on('incoming_call', (call) => {
       addIncomingCall(call);
     });
 
-    io_socket.on('call_history', (history) => {
+    socket.on('call_history', (history) => {
       renderHistory(history);
-      // Henüz görülmemiş çağrılar varsa aktif listeye al
-      const unacknowledged = (history || []).filter(c => c.status === 'pending');
-      if (unacknowledged.length > 0 && activeCalls.length === 0) {
-        activeCalls = [...unacknowledged];
-        renderActiveCalls();
+      // Bekleyen aktif çağrıları senkronize et
+      const pendingCalls = (history || []).filter(c => c.status === 'pending');
+      activeCalls = pendingCalls;
+      renderActiveCalls();
+      if (activeCalls.length > 0) {
         AudioManager.play(activeCalls[activeCalls.length - 1].locationKey);
+      } else {
+        AudioManager.stop();
       }
     });
 
-    io_socket.on('call_acknowledged', (data) => {
-      if (activeCalls.some(c => c.id === data.callId)) {
-        activeCalls = activeCalls.filter(c => c.id !== data.callId);
-        if (activeCalls.length > 0) {
-          AudioManager.play(activeCalls[activeCalls.length - 1].locationKey);
-        } else {
-          AudioManager.stop();
-        }
-        renderActiveCalls();
+    socket.on('call_acknowledged', (data) => {
+      activeCalls = activeCalls.filter(c => c.id !== data.callId);
+      if (activeCalls.length > 0) {
+        AudioManager.play(activeCalls[activeCalls.length - 1].locationKey);
+      } else {
+        AudioManager.stop();
+        missedCount = 0;
+        missedBadge.classList.remove('show');
       }
+      renderActiveCalls();
     });
 
     // ── Aktif Çağrıları Yan Yana Render Et ────────────
@@ -267,20 +301,28 @@
         overlayHeader.classList.remove('show');
       }
 
-      cardsContainer.innerHTML = activeCalls.map(call => `
-        <div class="call-card" id="card-${call.id}">
-          <div class="call-pulse-ring" style="--call-color: ${call.color || '#6c63ff'}">
-            <span>${call.icon || '📞'}</span>
+      const sounds = AudioManager.getSounds();
+
+      cardsContainer.innerHTML = activeCalls.map(call => {
+        const soundId = AudioManager.getRoomSound(call.locationKey);
+        const sound = sounds[soundId] || { name: 'Zil Sesi', icon: '🔔' };
+
+        return `
+          <div class="call-card" id="card-${call.id}">
+            <div class="call-pulse-ring" style="--call-color: ${call.color || '#6c63ff'}">
+              <span>${call.icon || '📞'}</span>
+            </div>
+            <div class="call-caller">${call.callerIcon || '👤'} ${call.callerName || 'Müdür'}</div>
+            <div class="call-label">Çağrı Geliyor</div>
+            <div class="call-location">${call.location}</div>
+            <div class="call-sound-tag"><span>${sound.icon}</span> ${sound.name}</div>
+            <div class="call-time">${formatDateTime(call.timestamp)}</div>
+            <button class="ack-btn" onclick="acknowledgeSingleCall('${call.id}')" type="button">
+              ✅ Görüldü
+            </button>
           </div>
-          <div class="call-caller">${call.callerIcon || '👤'} ${call.callerName || 'Müdür'}</div>
-          <div class="call-label">Çağrı Geliyor</div>
-          <div class="call-location">${call.location}</div>
-          <div class="call-time">${formatTime(call.timestamp)}</div>
-          <button class="ack-btn" onclick="acknowledgeSingleCall('${call.id}')" type="button">
-            ✅ Görüldü
-          </button>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
     // ── Gelen Çağrıyı Ekle ────────────────────────────
@@ -298,7 +340,7 @@
       void document.body.offsetWidth;
       document.body.classList.add('flash');
 
-      // En son gelen odanın sesini çal
+      // Odaya özel atanan ses tonunu çal
       AudioManager.play(call.locationKey);
 
       // Tarayıcı bildirimi
@@ -314,7 +356,7 @@
 
     // ── Tek Bir Çağrıyı Görüldü Yap ───────────────────
     function acknowledgeSingleCall(callId) {
-      io_socket.emit('acknowledge_call', { callId: callId });
+      socket.emit('acknowledge_call', { callId: callId });
       activeCalls = activeCalls.filter(c => c.id !== callId);
 
       if (activeCalls.length > 0) {
@@ -332,7 +374,7 @@
     // ── Tümünü Görüldü Yap ────────────────────────────
     function acknowledgeAllCalls() {
       activeCalls.forEach(c => {
-        io_socket.emit('acknowledge_call', { callId: c.id });
+        socket.emit('acknowledge_call', { callId: c.id });
       });
       activeCalls = [];
       AudioManager.stop();
@@ -343,20 +385,54 @@
 
     // ── Geçmişi Render Et ─────────────────────────────
     function renderHistory(history) {
-      if (!history || history.length === 0) {
-        historyList.innerHTML = '<div class="no-history">Henüz çağrı yok</div>';
+      const list = history || [];
+      if (historyCount) historyCount.textContent = list.length;
+
+      if (list.length === 0) {
+        historyList.innerHTML = '<div class="no-history">Henüz çağrı kaydı yok</div>';
         return;
       }
-      historyList.innerHTML = history.slice(0, 10).map(c => `
-        <div class="history-item">
-          <span class="h-icon">${c.icon || '📞'}</span>
-          <div class="h-info">
-            <div class="h-loc">${c.location} <span class="h-caller">${c.callerIcon || '👤'} ${c.callerName || 'Müdür'}</span></div>
-            <div class="h-time">${formatTime(c.timestamp)}</div>
+
+      const sounds = AudioManager.getSounds();
+
+      historyList.innerHTML = list.slice(0, 30).map(c => {
+        const soundId = AudioManager.getRoomSound(c.locationKey);
+        const sound = sounds[soundId] || { name: 'Zil Sesi', icon: '🔔' };
+        const isPending = c.status === 'pending';
+
+        return `
+          <div class="history-item ${isPending ? 'is-pending' : ''}" style="--room-color: ${c.color || '#6c63ff'}">
+            <div class="h-left">
+              <span class="h-icon">${c.icon || '📞'}</span>
+              <div class="h-info">
+                <div class="h-loc">
+                  <span class="h-room-name">${c.location}</span>
+                  <span class="h-caller">${c.callerIcon || '👤'} ${c.callerName || 'Müdür'}</span>
+                  <span class="h-sound-badge">${sound.icon} ${sound.name}</span>
+                </div>
+                <div class="h-time">🕒 ${formatDateTime(c.timestamp)}</div>
+              </div>
+            </div>
+            <div class="h-right">
+              ${isPending ? `
+                <button class="h-ack-btn" onclick="acknowledgeSingleCall('${c.id}')" type="button">
+                  ✅ Görüldü Yap
+                </button>
+              ` : `
+                <span class="h-status acknowledged">✓ Görüldü</span>
+              `}
+            </div>
           </div>
-          <span class="h-status ${c.status}">${c.status === 'acknowledged' ? 'Görüldü' : 'Bekliyor'}</span>
-        </div>
-      `).join('');
+        `;
+      }).join('');
+    }
+
+    // Geçmişi temizle butonu (ekrandaki listeyi temizler)
+    if (clearHistoryBtn) {
+      clearHistoryBtn.addEventListener('click', () => {
+        historyList.innerHTML = '<div class="no-history">Geçmiş temizlendi</div>';
+        if (historyCount) historyCount.textContent = '0';
+      });
     }
 
     // ── Tarayıcı Bildirimi ────────────────────────────
@@ -364,15 +440,51 @@
       if (!('Notification' in window)) return;
       const callerTitle = `${call.callerIcon || '👤'} ${call.callerName || 'Müdür'}`;
       if (Notification.permission === 'granted') {
-        new Notification(`📞 ${callerTitle} – ${call.location}`, {
-          body: `${call.callerName || 'Müdür'} sizi ${call.location} odasına çağırıyor.`,
-          icon: '/favicon.ico',
-          tag: 'callmee',
-          renotify: true
-        });
+        try {
+          new Notification(`📞 ${callerTitle} – ${call.location}`, {
+            body: `${call.callerName || 'Müdür'} sizi ${call.location} odasına çağırıyor.`,
+            tag: 'callmee',
+            renotify: true
+          });
+        } catch(e) {}
       } else if (Notification.permission !== 'denied') {
         Notification.requestPermission();
       }
+    }
+
+    // ── Ses İzni & Web Audio Kilidi Açma ──────────────
+    function updateAudioUI(unlocked) {
+      if (!audioToggleBtn) return;
+      if (unlocked) {
+        audioToggleBtn.classList.add('active');
+        if (audioToggleIcon) audioToggleIcon.textContent = '🔊';
+        if (audioToggleText) audioToggleText.textContent = 'Ses Aktif (Test Et)';
+      } else {
+        audioToggleBtn.classList.remove('active');
+        if (audioToggleIcon) audioToggleIcon.textContent = '🔔';
+        if (audioToggleText) audioToggleText.textContent = 'Sesi Etkinleştir / Test Et';
+      }
+    }
+
+    function unlockAudioHandler() {
+      AudioManager.unlock().then(() => {
+        updateAudioUI(true);
+      });
+    }
+
+    // Sayfada herhangi bir tıklama veya dokunmada ses kilidini aç
+    ['click', 'touchstart', 'keydown'].forEach(evt => {
+      document.addEventListener(evt, unlockAudioHandler, { once: true, passive: true });
+    });
+
+    if (audioToggleBtn) {
+      audioToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        AudioManager.unlock().then(() => {
+          updateAudioUI(true);
+          AudioManager.previewSound(1);
+        });
+      });
     }
 
     // ── Yardımcı ──────────────────────────────────────
@@ -380,6 +492,19 @@
       if (!iso) return '';
       const d = new Date(iso);
       return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function formatDateTime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      const time = d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      if (isToday) {
+        return time;
+      }
+      const date = d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
+      return `${date} • ${time}`;
     }
 
     // Sayfa görünür olduğunda missed sıfırla

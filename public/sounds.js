@@ -350,6 +350,22 @@ const AudioManager = (() => {
   // İlk yüklemede hafızayı tazele
   loadRoomSounds();
 
+  function unlock() {
+    try {
+      const ctx = getCtx();
+      if (ctx && ctx.state === 'suspended') {
+        return ctx.resume();
+      }
+      return Promise.resolve();
+    } catch (e) {
+      return Promise.resolve();
+    }
+  }
+
+  function isUnlocked() {
+    return audioCtx !== null && audioCtx.state === 'running';
+  }
+
   return {
     getSounds: () => SOUNDS,
     getRoomSounds: () => roomSounds,
@@ -360,6 +376,8 @@ const AudioManager = (() => {
     playForRoom,
     play: (roomKey) => playForRoom(roomKey),
     previewSound,
-    stop
+    stop,
+    unlock,
+    isUnlocked
   };
 })();
