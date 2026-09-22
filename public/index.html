@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
@@ -27,6 +27,25 @@
     </div>
     <div class="app-subtitle">Çağrı Sistemi</div>
     <div class="screen-label">👔 Müdür Paneli</div>
+  </div>
+
+  <!-- MANAGER SELECTOR -->
+  <div class="profile-bar">
+    <span class="profile-label">👤 Çağıran Yönetici</span>
+    <div class="profile-options" id="profileOptions">
+      <button class="profile-btn active" data-id="mehmet" data-name="Mehmet Bey" data-icon="👔" type="button">
+        <span class="p-icon">👔</span>
+        <span class="p-name">Mehmet Bey</span>
+      </button>
+      <button class="profile-btn" data-id="esra" data-name="Esra Hanım" data-icon="👩‍💼" type="button">
+        <span class="p-icon">👩‍💼</span>
+        <span class="p-name">Esra Hanım</span>
+      </button>
+      <button class="profile-btn" data-id="ebru" data-name="Ebru Hanım" data-icon="👩‍💼" type="button">
+        <span class="p-icon">👩‍💼</span>
+        <span class="p-name">Ebru Hanım</span>
+      </button>
+    </div>
   </div>
 
   <!-- CONNECTION STATUS -->
@@ -114,10 +133,52 @@
     const toast      = document.getElementById('sentToast');
     let toastTimer   = null;
 
+    // ── Profil Tanımları ve Yönetici Seçimi ────────────
+    const PROFILES = {
+      'mehmet': { id: 'mehmet', name: 'Mehmet Bey', icon: '👔' },
+      'esra':   { id: 'esra',   name: 'Esra Hanım', icon: '👩‍💼' },
+      'ebru':   { id: 'ebru',   name: 'Ebru Hanım', icon: '👩‍💼' }
+    };
+
+    let activeCaller = PROFILES['mehmet'];
+
+    // URL parametresini kontrol et (?kisi=mehmet veya ?kisi=esra veya ?kisi=ebru)
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramUser = (urlParams.get('kisi') || urlParams.get('user') || '').toLowerCase();
+
+    if (paramUser && PROFILES[paramUser]) {
+      activeCaller = PROFILES[paramUser];
+      try { localStorage.setItem('callmee_active_caller', JSON.stringify(activeCaller)); } catch(e) {}
+    } else {
+      try {
+        const saved = localStorage.getItem('callmee_active_caller');
+        if (saved) activeCaller = JSON.parse(saved);
+      } catch(e) {}
+    }
+
+    function updateProfileUI() {
+      document.querySelectorAll('.profile-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.id === activeCaller.id);
+      });
+    }
+
+    document.querySelectorAll('.profile-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        if (PROFILES[id]) {
+          activeCaller = PROFILES[id];
+          try { localStorage.setItem('callmee_active_caller', JSON.stringify(activeCaller)); } catch(e) {}
+          updateProfileUI();
+        }
+      });
+    });
+
+    updateProfileUI();
+
     socket.on('connect', () => {
       statusDot.style.background = '#22c55e';
       statusDot.style.boxShadow  = '0 0 8px #22c55e';
-      statusText.textContent = 'Bağlantı aktif';
+      statusText.textContent = `Bağlantı aktif • ${activeCaller.name}`;
     });
 
     socket.on('disconnect', () => {
@@ -127,7 +188,7 @@
     });
 
     socket.on('call_acknowledged', (data) => {
-      // Görüldü bildirimi gelirse (isteğe bağlı UI güncellemesi)
+      // Görüldü bildirimi
     });
 
     function sendCall(btn) {
@@ -147,12 +208,14 @@
         locationKey: key,
         location: name,
         icon: icon,
-        color: color
+        color: color,
+        callerName: activeCaller.name,
+        callerIcon: activeCaller.icon
       });
 
       // Toast göster
-      document.getElementById('toastIcon').textContent = icon;
-      document.getElementById('toastText').textContent = name + ' — çağrı gönderildi';
+      document.getElementById('toastIcon').textContent = activeCaller.icon;
+      document.getElementById('toastText').textContent = `${name} • ${activeCaller.name} — çağrı gönderildi`;
       clearTimeout(toastTimer);
       toast.classList.add('show');
       toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);

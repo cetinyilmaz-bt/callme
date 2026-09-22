@@ -56,6 +56,7 @@
       <div class="call-pulse-ring" id="callRing" style="--call-color: #6c63ff">
         <span id="callIcon">📞</span>
       </div>
+      <div class="call-caller" id="callCaller">👤 Müdür</div>
       <div class="call-label">Çağrı Geliyor</div>
       <div class="call-location" id="callLocation">—</div>
       <div class="call-time" id="callTime"></div>
@@ -238,11 +239,12 @@
     function showCall(call) {
       currentCallId = call.id;
 
-      // Renk ve ikon
+      // Renk, ikon ve çağıran kişi
       callRing.style.setProperty('--call-color', call.color || '#6c63ff');
-      callIcon.textContent = call.icon || '📞';
-      callLoc.textContent  = call.location;
-      callTime.textContent = formatTime(call.timestamp);
+      callIcon.textContent   = call.icon || '📞';
+      callLoc.textContent    = call.location;
+      callTime.textContent   = formatTime(call.timestamp);
+      document.getElementById('callCaller').textContent = `${call.callerIcon || '👤'} ${call.callerName || 'Müdür'}`;
 
       overlay.classList.add('active');
       document.body.classList.remove('flash');
@@ -285,7 +287,7 @@
         <div class="history-item">
           <span class="h-icon">${c.icon || '📞'}</span>
           <div class="h-info">
-            <div class="h-loc">${c.location}</div>
+            <div class="h-loc">${c.location} <span class="h-caller">${c.callerIcon || '👤'} ${c.callerName || 'Müdür'}</span></div>
             <div class="h-time">${formatTime(c.timestamp)}</div>
           </div>
           <span class="h-status ${c.status}">${c.status === 'acknowledged' ? 'Görüldü' : 'Bekliyor'}</span>
@@ -296,9 +298,10 @@
     // ── Tarayıcı Bildirimi ────────────────────────────
     function sendBrowserNotif(call) {
       if (!('Notification' in window)) return;
+      const callerTitle = `${call.callerIcon || '👤'} ${call.callerName || 'Müdür'}`;
       if (Notification.permission === 'granted') {
-        new Notification('📞 Çağrı – ' + call.location, {
-          body: call.icon + ' ' + call.location + ' odasından çağrı geliyor',
+        new Notification(`📞 ${callerTitle} – ${call.location}`, {
+          body: `${call.callerName || 'Müdür'} sizi ${call.location} odasına çağırıyor.`,
           icon: '/favicon.ico',
           tag: 'callmee',
           renotify: true

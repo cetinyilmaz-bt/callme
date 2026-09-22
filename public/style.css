@@ -588,3 +588,90 @@ html, body {
   animation: pulse-btn 0.5s infinite;
 }
 
+/* ── PROFILE BAR (Müdür Seçici) ── */
+.profile-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 10px auto 16px;
+  max-width: 440px;
+  padding: 0 16px;
+  width: 100%;
+}
+
+.profile-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.profile-options {
+  display: flex;
+  gap: 6px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  padding: 5px;
+  border-radius: 30px;
+  width: 100%;
+  justify-content: center;
+}
+
+.profile-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  flex: 1;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.profile-btn:hover {
+  color: #fff;
+}
+
+.profile-btn.active {
+  background: linear-gradient(135deg, #6c63ff, #8b5cf6);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(108, 99, 255, 0.45);
+}
+
+/* ── CALLER BADGES IN ASİSTAN ── */
+.call-caller {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(108, 99, 255, 0.25);
+  border: 1px solid rgba(108, 99, 255, 0.5);
+  color: #c7d2fe;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-top: 6px;
+  box-shadow: 0 0 15px rgba(108, 99, 255, 0.3);
+}
+
+.h-caller {
+  display: inline-block;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #a8a4ff;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-left: 6px;
+  font-weight: 600;
+}
+
