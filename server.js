@@ -26,6 +26,46 @@ app.get('/health', (req, res) => {
 // Çağrı geçmişi (son 50)
 let callHistory = [];
 
+// Profil ve Oda Tanımları (Yealink & API için)
+const PROFILES = {
+  'mehmet': { name: 'Mehmet Bey', icon: '👔' },
+  'esra':   { name: 'Esra Hanım', icon: '👩‍💼' },
+  'ebru':   { name: 'Ebru Hanım', icon: '👩‍💼' }
+};
+
+const LOCATIONS = {
+  'vip':         { name: 'VIP', icon: '👑', color: '#f59e0b' },
+  'seecolor':    { name: 'SeeColor', icon: '🎨', color: '#a855f7' },
+  'akademi':     { name: 'Akademi', icon: '🎓', color: '#3b82f6' },
+  'max':         { name: 'Max', icon: '⚡', color: '#f97316' },
+  'kis-bahcesi': { name: 'Kış Bahçesi', icon: '🌿', color: '#22c55e' },
+  'ana-oda':     { name: 'Ana Oda', icon: '🏛️', color: '#ef4444' }
+};
+
+// Ortak çağrı oluşturma fonksiyonu
+function processCall(data) {
+  const callEntry = {
+    id: Date.now().toString(),
+    location: data.location || 'Yönetici Odası',
+    locationKey: data.locationKey || 'custom',
+    color: data.color || '#f59e0b',
+    icon: data.icon || '📍',
+    callerName: data.callerName || 'Müdür',
+    callerIcon: data.callerIcon || '👤',
+    timestamp: new Date().toISOString(),
+    status: 'pending'
+  };
+
+  callHistory.unshift(callEntry);
+  if (callHistory.length > 50) callHistory.pop();
+
+  io.emit('incoming_call', callEntry);
+  io.emit('call_history', callHistory);
+
+  console.log(`[${callEntry.location}] ${callEntry.callerName} çağrı oluşturdu: ${callEntry.id}`);
+  return callEntry;
+}
+
 // Ana sayfa → Müdür ekranı
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -39,6 +79,50 @@ app.get('/assistant', (req, res) => {
 // Çağrı geçmişi API
 app.get('/api/history', (req, res) => {
   res.json(callHistory);
+});
+
+// Yealink IP Telefon ve Fiziksel Buton API Endpoint'i (GET & POST destekli)
+app.all(['/api/call', '/api/yealink'], (req, res) => {
+  const params = { ...req.query, ...(req.body || {}) };
+  const kisiKey = (params.kisi || params.caller || params.user || '').toLowerCase();
+  const odaKey = (params.oda || params.location || params.room || '').toLowerCase();
+
+  const profile = PROFILES[kisiKey] || {
+    name: params.callerName || params.kisi || 'Yönetici',
+    icon: params.callerIcon || '👔'
+  };
+
+  const loc = LOCATIONS[odaKey] || {
+    name: params.locationName || params.oda || 'Yönetici Odası',
+    icon: params.icon || '👑',
+    color: params.color || '#f59e0b'
+  };
+
+  const call = processCall({
+    location: loc.name,
+    locationKey: odaKey || 'custom',
+    color: loc.color,
+    icon: loc.icon,
+    callerName: profile.name,
+    callerIcon: profile.icon
+  });
+
+  const isYealink = req.path === '/api/yealink' ||
+                    params.format === 'xml' ||
+                    (req.headers['user-agent'] || '').toLowerCase().includes('yealink');
+
+  if (isYealink) {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<YealinkIPPhoneTextScreen Beep="yes" Timeout="3">
+  <Title>CallMee</Title>
+  <Text>Cagri Iletildi!
+${call.callerName} -> ${call.location}</Text>
+</YealinkIPPhoneTextScreen>`;
+    res.set('Content-Type', 'text/xml; charset=utf-8');
+    return res.send(xml);
+  }
+
+  res.json({ ok: true, message: 'Çağrı asistana iletildi', call });
 });
 
 // Çağrıyı sıfırla (asistan onayladığında)
@@ -60,26 +144,7 @@ io.on('connection', (socket) => {
 
   // Müdür çağrı gönderdiğinde
   socket.on('send_call', (data) => {
-    const callEntry = {
-      id: Date.now().toString(),
-      location: data.location,
-      locationKey: data.locationKey,
-      color: data.color,
-      icon: data.icon,
-      callerName: data.callerName || 'Müdür',
-      callerIcon: data.callerIcon || '👤',
-      timestamp: new Date().toISOString(),
-      status: 'pending'
-    };
-
-    callHistory.unshift(callEntry);
-    if (callHistory.length > 50) callHistory.pop();
-
-    // Tüm bağlı asistanlara yayınla (göndereni dahil et ki history güncellensin)
-    io.emit('incoming_call', callEntry);
-    io.emit('call_history', callHistory);
-
-    console.log(`[${callEntry.location}] ${callEntry.callerName} çağrı oluşturdu: ${callEntry.id}`);
+    processCall(data);
   });
 
   // Asistan görüldü dediğinde
