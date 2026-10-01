@@ -30,7 +30,8 @@ let callHistory = [];
 const PROFILES = {
   'mehmet': { name: 'Mehmet Bey', icon: '👔' },
   'esra':   { name: 'Esra Hanım', icon: '👩‍💼' },
-  'ebru':   { name: 'Ebru Hanım', icon: '👩‍💼' }
+  'ebru':   { name: 'Ebru Hanım', icon: '👩‍💼' },
+  'murat':  { name: 'Murat Ceylan', icon: '👔' }
 };
 
 const LOCATIONS = {
